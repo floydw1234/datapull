@@ -1,0 +1,14 @@
+{
+  "name": "datapull",
+  "version": "1.0.0",
+  "description": "pulling data from yelp,google,eventful",
+  "main": "app.js",
+  "scripts": {
+    "test": "test"
+  },
+  "author": "William Floyd",
+  "license": "ISC",
+  "dependencies": {
+    "yelp-fusion": "^2.0.3"
+  }
+}
