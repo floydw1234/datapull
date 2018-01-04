@@ -50,132 +50,14 @@ var googleLazy = new Schema({
 var model = mongoose.model('business', googleLazy);
 
 
-// max radius is 50,000m  ~36,000 business come up for a center of the eureka building
-/*
-googlePlacesQuery(geocode,searchRadius)
-.then(result =>{
-    console.log(result.length);
-});
-*/
-//testYelpCall(1000);
-//3333
-
-
 var searchRadius = 30000; //distance in meters
-
-function convertListOfCitiesToGeocodes(cities){
-    return new Promise(function(resolve){
-        var promiseList = [];
-        for(i = 0; i < cities.length ; i++){
-            promiseList.push(convertAddress(cities[i]));
-        }
-        Promise.all(promiseList).then(geocodes=>{
-            resolve(geocodes);
-        });
-    });
-}
-
-function buildListOfAllBusinesses(cities, searchRadius){
-    return new Promise(function(resolve){
-        convertListOfCitiesToGeocodes(cities).then(geocodes=>{
-            var promiseList = [];
-            for(i = 0; i < cities.length ; i++){
-                    promiseList.push(googlePlacesQuery(geocodes[i],searchRadius));
-                    promiseList.push(YelpPlacesQuery(geocodes[i],searchRadius));
-            }
-            Promise.all(promiseList).then(results=>{
-                resolve(results);
-            });
-        });
-    });
-}
-
-
-/*
-var idealJson = new Schema{
-    name: String,
-    latitude: Number,
-    longitude: Number,
-    vicinity: String,
-    address: String,
-    City: String,
-    Zip_Code: String,
-    Country: String
-}
-*/
-function parseBusinesses(results){
-    return new Promise(resolve=>{
-        var newResults = [];
-        for(i=0;i<results.length;i++){
-            if(i%2 == 0){
-                newResults.push(JSON.parse(results[i]));
-            }else{
-                newResults.push(results[i]);
-            }
-        }
-        if(newResults.length == results.length)
-        resolve(newResults);
-    });
-}
-
-
-function lookupGoogleAdresses(results){
-    console.log("asdf");
-    var promiseList = [];
-    return new Promise(resolve=>{
-        for(i=0;i<results.length;i++){
-            if(i%2 == 0){
-                //console.log(results[i].results.length);
-                for(j=0;j<results[i].results.length;j++){
-                    promiseList.push(request("https://maps.googleapis.com/maps/api/geocode/json?latlng="+ results[i].results[j].geometry.location.lat +","+ results[i].results[j].geometry.location.lng +"&key="+ apikeyGoogleGeocoding));
-                }
-            }
-        }
-        Promise.all(promiseList).then(addresses=>{
-            //console.log(JSON.parse(addresses[1]));
-            var addressCounter = 0;
-            for(i=0;i<results.length;i++){
-                if(i%2 == 0){
-                    for(j=0;j<results[i].results[j].lenght;j++){
-                        results[i].results[j].address = JSON.parse(addresses[addressCounter]).results[0].formatted_address;
-                        addressCounter++;
-                    }
-                }
-            }
-            resolve(results);
-        });
-    });
-}
-
-//main();
-
-
-
-
-
-function mainOld(){
-    buildListOfAllBusinesses(cities, searchRadius)
-    .then(results=>{
-        parseBusinesses(results).then(results=>{
-            lookupGoogleAdresses(results).then(results=>{
-                console.log(results[0].results.length);
-                //testPrintId(results[0].results);
-            });
-        });
-
-    });
-}
-
-
-
-"-----------------------------------------------------------------------------------------"
 
 
 
 main();
 
 
-function main(){
+function main(){ // This is the highest level function on this js file. gets a list of cities, converts to geocode, then does a for loop, storing business data in the database for each city using "getAndStoreBusinessData"
     var cities = ["Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
     var searchRadius = 3000; //distance in meters
     convertListOfCitiesToGeocodes(cities).then(list=>{
@@ -190,9 +72,9 @@ function main(){
 }
 
 
-function getAndStoreBusinessData(geoCode, radius){
+function getAndStoreBusinessData(geoCode, radius){ // This takes geoCode, radius and stores the detailed business data into the database using the helping functions below.
     return new Promise(resolve=>{
-        firstCall(geoCode, radius).then(allListings=>{
+        buildGoogleList(geoCode, radius).then(allListings=>{
             console.log("starting to filterDuplicates");
             return filterDuplicates(allListings);
         }).then(list => {
@@ -215,7 +97,8 @@ function getAndStoreBusinessData(geoCode, radius){
     });
 }
 
-function getMoreData(results){
+function getMoreData(results){ // This function takes the unique key from the "surface data"(data from the places search Api) and puts it through the place api to get extra info
+// the info comming out of this function is incredibly detailed and includes website, lists of pics, ratings, reviews etc. returns an array of detailed data.
     var promiseList = [];
     return new Promise(resolve=>{
         for(i=0;i<results.length;i++){
@@ -228,7 +111,8 @@ function getMoreData(results){
 }
 
 
-function filterDuplicates(results){
+function filterDuplicates(results){ // This function makes sure that we are not duplicating any database entries. this checks the unique Id that google assigns to a business
+    // against the id's in the database. If there is a match then it splices the business listing from the array so that it no longer exists
     var promiseList = [];
     return new Promise(resolve=>{
         for(i=0;i<results.length;i++){
@@ -252,7 +136,7 @@ function filterDuplicates(results){
 
 
 
-function firstCall(geocode, radius){
+function buildGoogleList(geocode, radius){ //this builds the list of businesses from googles places api response by calling the below function "recursivleyCallNextToken" to traverse the tokens and store the data
     var overallResults = [];
     return new Promise(resolve=>{
         googlePlacesQuery(geocode, radius)
@@ -272,7 +156,9 @@ function firstCall(geocode, radius){
 }
 
 
-function recursivleyCallNextToken(overallResults,next_token){
+function recursivleyCallNextToken(overallResults,next_token){ // this is a helper function that is neccessary for the data collection from google
+    // This recursivley resolves promises. This is needed because the end functoin needs to return a promise, and we are not sure when the end function will occur
+    // basically this function recursivley traverses nex_page_tokens from googles responses and adds all of the data to the "overallResults" variable that it is passing as an argument/parameter
     return new Promise(resolve=>{
 
         if(next_token == undefined){
@@ -295,7 +181,7 @@ function recursivleyCallNextToken(overallResults,next_token){
 
 
 
-function googlePlacesQuery(geocode,radius){
+function googlePlacesQuery(geocode,radius){ // returns a list of the businesses from GOOGLE with some data about them in the JSON format.
     return new Promise(function(resolve,reject){
         var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=" + geocode +"&radius="+ radius +"&key="+ apikeyGooglePlaces;
         request(url)
@@ -307,7 +193,7 @@ function googlePlacesQuery(geocode,radius){
     });
 }
 
-function YelpPlacesQuery(geocode,radius){ // max value of radius is 40000m or 25 miles
+function YelpPlacesQuery(geocode,radius){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
     return new Promise(function(resolve,reject){
         const client = yelp.client(apikeyYelp);
         client.search({
@@ -322,7 +208,7 @@ function YelpPlacesQuery(geocode,radius){ // max value of radius is 40000m or 25
     });
 }
 
-function testEventfulCall(){ //currently waiting for a response from the eventful team for an error with their api stuff - api key request gives a 404 request
+function testEventfulCall(){ //To be implemented
     request("http://api.eventful.com/rest/events/search?...&where=32.746682,-117.162741&within=25")
     .then(result => {
         console.log(result);
@@ -330,7 +216,7 @@ function testEventfulCall(){ //currently waiting for a response from the eventfu
 
 }
 
-function convertAddress(address){
+function convertAddress(address){ //This takes an address/searchTerm and returns a promise with the geoCode '33.6845673,-117.8265049' as a resolve
 		return new Promise(function(resolve){
 				  var options = {
 				    provider: 'google',
@@ -351,6 +237,47 @@ function convertAddress(address){
 }
 
 
+
+function convertListOfCitiesToGeocodes(cities){ // takes a list of cities, puts them through a google geocode api to return a list of geocodes
+    return new Promise(function(resolve){
+        var promiseList = [];
+        for(i = 0; i < cities.length ; i++){
+            promiseList.push(convertAddress(cities[i]));
+        }
+        Promise.all(promiseList).then(geocodes=>{
+            resolve(geocodes);
+        });
+    });
+}
+
+function buildListOfAllBusinesses(cities, searchRadius){ // function that takes surface data from yelp and google places and puts it into an array --- unformated
+    return new Promise(function(resolve){
+        convertListOfCitiesToGeocodes(cities).then(geocodes=>{
+            var promiseList = [];
+            for(i = 0; i < cities.length ; i++){
+                    promiseList.push(googlePlacesQuery(geocodes[i],searchRadius));
+                    promiseList.push(YelpPlacesQuery(geocodes[i],searchRadius));
+            }
+            Promise.all(promiseList).then(results=>{
+                resolve(results);
+            });
+        });
+    });
+}
+
+
+function parseList(results){ // helper function for JSON.parsing the data in a list
+    return new Promise(resolve=>{
+        var newResults = [];
+        for(i=0;i<results.length;i++){
+            newResults.push(JSON.parse(results[i]));
+        }
+        if(newResults.length == results.length)
+        resolve(newResults);
+    });
+}
+
+
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
@@ -359,16 +286,6 @@ app.set('view engine', 'jade');
 // error handler
 app.get("/", function(req,res){
 	res.sendfile('public/index.html');
-});
-
-app.post("/postVerve",function(req,res){// recieves data from verve and stores it into mongo
-    //console.log(req.body);
-    var Verve = mongoose.model('vSensors', verve);
-    var verveEntry = new Verve(req.body);
-    verveEntry.save(function(err) {
-      if (err) res.status(500).send('{"error": "something went wrong"}');
-      else res.status(201).send(JSON.stringify(req.body));
-    });
 });
 
 
@@ -380,6 +297,9 @@ app.listen(3000, function () {
 
 
 /*
+
+----------------Below here lies the gode graveyard. Functions/snippets here were just useless enough to not be needed, but took enough time to make me think that
+they might be worth something in the future. Most of these half work so use with extreme caution or probably not at all-------------------------------------------
 
 function subsequentCalls(token){
     return new Promise(resolve=>{
@@ -464,4 +384,48 @@ var googleJson = { geometry: { location: [Object], viewport: [Object] },
     types: [ 'neighborhood', 'political' ],
     vicinity: 'Irvine'
 }
+
+
+
+function lookupGoogleAdresses(results){
+    console.log("asdf");
+    var promiseList = [];
+    return new Promise(resolve=>{
+        for(i=0;i<results.length;i++){
+            if(i%2 == 0){
+                //console.log(results[i].results.length);
+                for(j=0;j<results[i].results.length;j++){
+                    promiseList.push(request("https://maps.googleapis.com/maps/api/geocode/json?latlng="+ results[i].results[j].geometry.location.lat +","+ results[i].results[j].geometry.location.lng +"&key="+ apikeyGoogleGeocoding));
+                }
+            }
+        }
+        Promise.all(promiseList).then(addresses=>{
+            //console.log(JSON.parse(addresses[1]));
+            var addressCounter = 0;
+            for(i=0;i<results.length;i++){
+                if(i%2 == 0){
+                    for(j=0;j<results[i].results[j].lenght;j++){
+                        results[i].results[j].address = JSON.parse(addresses[addressCounter]).results[0].formatted_address;
+                        addressCounter++;
+                    }
+                }
+            }
+            resolve(results);
+        });
+    });
+}
+function mainOld(){
+    buildListOfAllBusinesses(cities, searchRadius)
+    .then(results=>{
+        parseBusinesses(results).then(results=>{
+            lookupGoogleAdresses(results).then(results=>{
+                console.log(results[0].results.length);
+                //testPrintId(results[0].results);
+            });
+        });
+
+    });
+}
+
+
 */
