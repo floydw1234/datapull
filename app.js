@@ -254,19 +254,52 @@ doc.save(function(err) {
    if (err) throw err;
 });
 */
+function firstCall(geocode, radius){
+    return new Promise(resolve=>{
+        googlePlacesQuery(geocode, radius)
+        .then(results=>{
 
-googlePlacesQuery('40.755933, -73.986929',5000)
-.then(results=>{
-
-    for(i = 0;i<JSON.parse(results).results.length;i++){
-        globalResults.push(JSON.parse(results).results[i]);
-        console.log(i);
-    }
-    recursivleyCallNextToken(JSON.parse(results).next_page_token)
-
-
+            for(i = 0;i<JSON.parse(results).results.length;i++){
+                globalResults.push(JSON.parse(results).results[i]);
+            }
+            resolve(JSON.parse(results).next_page_token);
+            //recursivleyCallNextToken(JSON.parse(results).next_page_token)
+        });
+    });
+}
+function subsequentCalls(token){
+    return new Promise(resolve=>{
+        console.log(token);
+        var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=" + token +  "&key=" + apikeyGooglePlaces;
+        setTimeout(()=>{
+            request(url).then(results=>{
+                for(i = 0;i<JSON.parse(results).results.length;i++){
+                    globalResults.push(JSON.parse(results).results[i]);
+                    console.log(i);
+                }
+                if(JSON.parse(results).next_page_token != undefined){
+                    resolve(JSON.parse(results).next_page_token);
+                }else{
+                    resolve(new Promise());
+                }
+            });
+        },3000);
+    });
+}
+firstCall('40.755933, -73.986929',5000).then(token=>{
+    return subsequentCalls(token);
+}).then(token=>{
+    return subsequentCalls(token);
+}).catch(()=>{
+    return new Promise();
+}).then(()=>{
+    console.log(globalResults.length);
 });
-
+/*
+setInterval(()=>{
+    console.log(globalResults.length);
+},3000);
+*/
 function recursivleyCallNextToken(next_token){
     console.log(next_token);
     if(next_token == undefined){
@@ -285,9 +318,7 @@ function recursivleyCallNextToken(next_token){
     },3000);
 }
 
-setInterval(()=>{
-    console.log(globalResults.length);
-},3000);
+
 
 function googlePlacesQuery(geocode,radius){
     return new Promise(function(resolve,reject){
