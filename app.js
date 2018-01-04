@@ -39,8 +39,34 @@ var business = new Schema({
 });
 
 var googleLazy = new Schema({
-    business: Object
+    business: Object,
+    dateTime: Date
 });
+
+function getDateTime() {
+
+    var date = new Date();
+
+    var hour = date.getHours();
+    hour = (hour < 10 ? "0" : "") + hour;
+
+    var min  = date.getMinutes();
+    min = (min < 10 ? "0" : "") + min;
+
+    var sec  = date.getSeconds();
+    sec = (sec < 10 ? "0" : "") + sec;
+
+    var year = date.getFullYear();
+
+    var month = date.getMonth() + 1;
+    month = (month < 10 ? "0" : "") + month;
+
+    var day  = date.getDate();
+    day = (day < 10 ? "0" : "") + day;
+
+    return year + ":" + month + ":" + day + ":" + hour + ":" + min + ":" + sec;
+
+}
 // max radius is 50,000m  ~36,000 business come up for a center of the eureka building
 /*
 googlePlacesQuery(geocode,searchRadius)
@@ -141,17 +167,7 @@ function lookupGoogleAdresses(results){
 //main();
 
 
-function testPrintId(results){
-    console.log(results.length);
-    for(i=0;i<results.length;i++){
-        request("https://maps.googleapis.com/maps/api/place/details/json?placeid=" + results[i].place_id + "&key="+apikeyGooglePlaces)
-        .then(response=>{
-            console.log(response);
-            console.log("--------------------------------");
-        });
 
-    }
-}
 
 
 function main(){
@@ -206,116 +222,79 @@ function storeBusinessInfo(results){
 
 
 
-var yelpJson = { id: 'bill-barber-community-park-irvine',
-  name: 'Bill Barber Community Park',
-  image_url: 'https://s3-media3.fl.yelpcdn.com/bphoto/b-eP7kbTCFcKzNR90y2y6Q/o.jpg',
-  is_closed: false,
-  url: 'https://www.yelp.com/biz/bill-barber-community-park-irvine?adjust_creative=5CbWkzfGkndKoLoJgJLs3A&utm_campaign=yelp_api_v3&utm_medium=api_v3_business_search&utm_source=5CbWkzfGkndKoLoJgJLs3A',
-  review_count: 95,
-  categories: [ { alias: 'parks', title: 'Parks' } ],
-  rating: 4.5,
-  coordinates: { latitude: 33.6874996588192, longitude: -117.822344547658 },
-  transactions: [],
-  location:
-   { address1: '4 Civic Center Plz',
-     address2: '',
-     address3: '',
-     city: 'Irvine',
-     zip_code: '92606',
-     country: 'US',
-     state: 'CA',
-     display_address: [ '4 Civic Center Plz', 'Irvine, CA 92606' ] },
-  phone: '+19497246714',
-  display_phone: '(949) 724-6714',
-  distance: 504.9263533697999
+
+
+
+
+
+function main(){
+    firstCall('40.755933, -73.986929',500).then(allListings=>{
+        return getMoreData(allListings);
+    }).then(list => {
+        var model = mongoose.model('business', googleLazy);
+        for(i=0;i<list.length;i++){
+            var doc = new model({
+                business: JSON.parse(list[i]),
+                dateTime: getDateTime()
+            });
+            doc.save(function(err) {
+               if (err) throw err;
+            });
+        }
+    });
 }
 
-var googleJson = { geometry: { location: [Object], viewport: [Object] },
-    icon: 'https://maps.gstatic.com/mapfiles/place_api/icons/geocode-71.png',
-    id: '432c5fca2ea64a148520f0c77b0c1a47ac0dd80e',
-    name: 'Westpark',
-    photos: [ [Object] ],
-    place_id: 'ChIJ7cySrzHc3IARSHSTK3btySI',
-    reference: 'CmRbAAAAzQdwcrzwqxWUaQdQxLKaYBat_fdV3nuUz1dypQfmzKuMezixiG4w9nrO0P6meO6afiBOY9FHoC1KmBlJrcIfVDK5cVqhVVZb-LxNNS1t--neMXzyWaF2W6IyL6RjHPG-EhCQhaFUePsJIZH8BBUkjDnLGhQlrKRMX-mYF5C7_12hkJmoiqZd9w',
-    scope: 'GOOGLE',
-    types: [ 'neighborhood', 'political' ],
-    vicinity: 'Irvine'
+function getMoreData(results){
+    var promiseList = [];
+    return new Promise(resolve=>{
+        for(i=0;i<results.length;i++){
+            promiseList.push(request("https://maps.googleapis.com/maps/api/place/details/json?placeid=" + results[i].place_id + "&key="+apikeyGooglePlaces));
+        }
+        Promise.all(promiseList).then(list=>{
+
+            resolve(list);
+        });
+    });
 }
 
 
 
-var globalResults = [];
-var model = mongoose.model('business', googleLazy);
-/*
-var doc = new model({
-    name: JSON.parse(results).results[i]
-});
-doc.save(function(err) {
-   if (err) throw err;
-});
-*/
 function firstCall(geocode, radius){
+    var overallResults = [];
     return new Promise(resolve=>{
         googlePlacesQuery(geocode, radius)
         .then(results=>{
-
             for(i = 0;i<JSON.parse(results).results.length;i++){
-                globalResults.push(JSON.parse(results).results[i]);
+                overallResults.push(JSON.parse(results).results[i]);
             }
-            resolve(JSON.parse(results).next_page_token);
             //recursivleyCallNextToken(JSON.parse(results).next_page_token)
+            recursivleyCallNextToken(overallResults,JSON.parse(results).next_page_token)
+            .then(()=>{
+                resolve(overallResults);
+            });
+
         });
     });
 }
-function subsequentCalls(token){
+
+
+function recursivleyCallNextToken(overallResults,next_token){
     return new Promise(resolve=>{
-        console.log(token);
-        var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=" + token +  "&key=" + apikeyGooglePlaces;
+        if(next_token == undefined){
+            resolve();
+            return;
+        }
+        var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=" + next_token +  "&key=" + apikeyGooglePlaces;
         setTimeout(()=>{
             request(url).then(results=>{
                 for(i = 0;i<JSON.parse(results).results.length;i++){
-                    globalResults.push(JSON.parse(results).results[i]);
-                    console.log(i);
+                    overallResults.push(JSON.parse(results).results[i]);
                 }
-                if(JSON.parse(results).next_page_token != undefined){
-                    resolve(JSON.parse(results).next_page_token);
-                }else{
-                    resolve(new Promise());
-                }
+                resolve(recursivleyCallNextToken(JSON.parse(results).next_page_token));
             });
         },3000);
     });
-}
-firstCall('40.755933, -73.986929',5000).then(token=>{
-    return subsequentCalls(token);
-}).then(token=>{
-    return subsequentCalls(token);
-}).catch(()=>{
-    return new Promise();
-}).then(()=>{
-    console.log(globalResults.length);
-});
-/*
-setInterval(()=>{
-    console.log(globalResults.length);
-},3000);
-*/
-function recursivleyCallNextToken(next_token){
-    console.log(next_token);
-    if(next_token == undefined){
-        return 1;
-    }
-    var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=" + next_token +  "&key=" + apikeyGooglePlaces;
-    //console.log(url);
-    setTimeout(()=>{
-        request(url).then(results=>{
-            for(i = 0;i<JSON.parse(results).results.length;i++){
-                globalResults.push(JSON.parse(results).results[i]);
-                console.log(i);
-            }
-            return recursivleyCallNextToken(JSON.parse(results).next_page_token);
-        });
-    },3000);
+
 }
 
 
@@ -402,3 +381,91 @@ module.exports = app;
 app.listen(3000, function () {
   console.log('your app listening on port 3000!');
 });
+
+
+/*
+
+function subsequentCalls(token){
+    return new Promise(resolve=>{
+        console.log(token);
+        var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=" + token +  "&key=" + apikeyGooglePlaces;
+        setTimeout(()=>{
+            request(url).then(results=>{
+                for(i = 0;i<JSON.parse(results).results.length;i++){
+                    globalResults.push(JSON.parse(results).results[i]);
+                    console.log(i);
+                }
+                if(JSON.parse(results).next_page_token != undefined){
+                    resolve(JSON.parse(results).next_page_token);
+                }else{
+                    resolve(new Promise());
+                }
+            });
+        },3000);
+    });
+}
+firstCall('40.755933, -73.986929',5000).then(token=>{
+    return subsequentCalls(token);
+}).then(token=>{
+    return subsequentCalls(token);
+}).catch(()=>{
+    return new Promise();
+}).then(()=>{
+    console.log(globalResults.length);
+});
+
+setInterval(()=>{
+    console.log(globalResults.length);
+},3000);
+
+
+function testPrintId(results){
+    console.log(results.length);
+    for(i=0;i<results.length;i++){
+        request("https://maps.googleapis.com/maps/api/place/details/json?placeid=" + results[i].place_id + "&key="+apikeyGooglePlaces)
+        .then(response=>{
+            console.log(response);
+            console.log("--------------------------------");
+        });
+
+    }
+}
+
+
+
+var yelpJson = { id: 'bill-barber-community-park-irvine',
+  name: 'Bill Barber Community Park',
+  image_url: 'https://s3-media3.fl.yelpcdn.com/bphoto/b-eP7kbTCFcKzNR90y2y6Q/o.jpg',
+  is_closed: false,
+  url: 'https://www.yelp.com/biz/bill-barber-community-park-irvine?adjust_creative=5CbWkzfGkndKoLoJgJLs3A&utm_campaign=yelp_api_v3&utm_medium=api_v3_business_search&utm_source=5CbWkzfGkndKoLoJgJLs3A',
+  review_count: 95,
+  categories: [ { alias: 'parks', title: 'Parks' } ],
+  rating: 4.5,
+  coordinates: { latitude: 33.6874996588192, longitude: -117.822344547658 },
+  transactions: [],
+  location:
+   { address1: '4 Civic Center Plz',
+     address2: '',
+     address3: '',
+     city: 'Irvine',
+     zip_code: '92606',
+     country: 'US',
+     state: 'CA',
+     display_address: [ '4 Civic Center Plz', 'Irvine, CA 92606' ] },
+  phone: '+19497246714',
+  display_phone: '(949) 724-6714',
+  distance: 504.9263533697999
+}
+
+var googleJson = { geometry: { location: [Object], viewport: [Object] },
+    icon: 'https://maps.gstatic.com/mapfiles/place_api/icons/geocode-71.png',
+    id: '432c5fca2ea64a148520f0c77b0c1a47ac0dd80e',
+    name: 'Westpark',
+    photos: [ [Object] ],
+    place_id: 'ChIJ7cySrzHc3IARSHSTK3btySI',
+    reference: 'CmRbAAAAzQdwcrzwqxWUaQdQxLKaYBat_fdV3nuUz1dypQfmzKuMezixiG4w9nrO0P6meO6afiBOY9FHoC1KmBlJrcIfVDK5cVqhVVZb-LxNNS1t--neMXzyWaF2W6IyL6RjHPG-EhCQhaFUePsJIZH8BBUkjDnLGhQlrKRMX-mYF5C7_12hkJmoiqZd9w',
+    scope: 'GOOGLE',
+    types: [ 'neighborhood', 'political' ],
+    vicinity: 'Irvine'
+}
+*/
