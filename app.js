@@ -14,6 +14,7 @@ db.once('open', function() {
   console.log('we are connected to mongodb!');
 });
 var Schema = mongoose.Schema;
+
 var PythonShell = require('python-shell');
 
 var apikeyGooglePlaces = "AIzaSyBKXwgZdao35HxDge4AEqj1VYR5l2z-dOI";
@@ -40,33 +41,13 @@ var business = new Schema({
 
 var googleLazy = new Schema({
     business: Object,
-    dateTime: Date
+    date: Date,
+    place_id: String
 });
 
-function getDateTime() {
+var model = mongoose.model('business', googleLazy);
 
-    var date = new Date();
 
-    var hour = date.getHours();
-    hour = (hour < 10 ? "0" : "") + hour;
-
-    var min  = date.getMinutes();
-    min = (min < 10 ? "0" : "") + min;
-
-    var sec  = date.getSeconds();
-    sec = (sec < 10 ? "0" : "") + sec;
-
-    var year = date.getFullYear();
-
-    var month = date.getMonth() + 1;
-    month = (month < 10 ? "0" : "") + month;
-
-    var day  = date.getDate();
-    day = (day < 10 ? "0" : "") + day;
-
-    return year + ":" + month + ":" + day + ":" + hour + ":" + min + ":" + sec;
-
-}
 // max radius is 50,000m  ~36,000 business come up for a center of the eureka building
 /*
 googlePlacesQuery(geocode,searchRadius)
@@ -77,7 +58,7 @@ googlePlacesQuery(geocode,searchRadius)
 //testYelpCall(1000);
 //3333
 
-var cities = ["Irvine, Ca"];
+
 var searchRadius = 30000; //distance in meters
 
 function convertListOfCitiesToGeocodes(cities){
@@ -170,7 +151,7 @@ function lookupGoogleAdresses(results){
 
 
 
-function main(){
+function mainOld(){
     buildListOfAllBusinesses(cities, searchRadius)
     .then(results=>{
         parseBusinesses(results).then(results=>{
@@ -183,64 +164,52 @@ function main(){
     });
 }
 
-function storeBusinessInfo(results){
-    var model = mongoose.model('business', business);
 
-    for(i=0;i<results.length;i++){
-        if(results[i].results[0].scope == "GOOGLE"){//something unique to the format of the google results so this will parse everything else correctly
-            var doc = new model({
-                name: results[i].results.name,
-                latitude: results[i].results.geometry.location.lat,
-                longitude: results[i].results.geometry.location.lng,
-                address: results[i].results,
-                City: results[i].results,
-                Zip_Code: results[i].results,
-                Country: results[i].results
-            });
-            doc.save(function(err) {
-               if (err) throw err;
-           });
-        }else if(results[i].hasOwnProperty('is_closed')){//something unique to the format of the yelp results so this will parse everything else correctly
-            var doc = new model({
-                name: results[i].name,
-                latitude: results[i].coordinates.latitude,
-                longitude: results[i].coordinates.longitude,
-                address: results[i].location.address1,
-                City: results[i].location.city,
-                Zip_Code: results[i].location.zip_code,
-                Country: results[i].location.country
-            });
-            doc.save(function(err) {
-               if (err) throw err;
-           });
-        }else{
-            //add other providers here for using api's other than yelp and google's
-        }
-    }
-}
+
+"-----------------------------------------------------------------------------------------"
 
 
 
-
-
-
-
+main();
 
 
 function main(){
-    firstCall('40.755933, -73.986929',500).then(allListings=>{
-        return getMoreData(allListings);
-    }).then(list => {
-        var model = mongoose.model('business', googleLazy);
+    var cities = ["Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
+    var searchRadius = 3000; //distance in meters
+    convertListOfCitiesToGeocodes(cities).then(list=>{
+        console.log(list);
         for(i=0;i<list.length;i++){
-            var doc = new model({
-                business: JSON.parse(list[i]),
-                dateTime: getDateTime()
-            });
-            doc.save(function(err) {
-               if (err) throw err;
+            getAndStoreBusinessData(list[i],searchRadius).then(()=>{
+                console.log(list.length);
+                console.log("done with: " + cities[i]);
             });
         }
+    });
+}
+
+
+function getAndStoreBusinessData(geoCode, radius){
+    return new Promise(resolve=>{
+        firstCall(geoCode, radius).then(allListings=>{
+            console.log("starting to filterDuplicates");
+            return filterDuplicates(allListings);
+        }).then(list => {
+            console.log("starting to Get more data");
+            return getMoreData(list);
+        }).then(list => {
+            console.log("starting saving");
+            for(i=0;i<list.length;i++){
+                var doc = new model({
+                    business: JSON.parse(list[i]),
+                    date: new Date(),
+                    place_id: JSON.parse(list[i]).result.place_id
+                });
+                doc.save(function(err) {
+                   if (err) throw err;
+                });
+            }
+            resolve();
+        });
     });
 }
 
@@ -251,10 +220,32 @@ function getMoreData(results){
             promiseList.push(request("https://maps.googleapis.com/maps/api/place/details/json?placeid=" + results[i].place_id + "&key="+apikeyGooglePlaces));
         }
         Promise.all(promiseList).then(list=>{
-
             resolve(list);
         });
     });
+}
+
+
+function filterDuplicates(results){
+    var promiseList = [];
+    return new Promise(resolve=>{
+        for(i=0;i<results.length;i++){
+            //console.log(i);
+            //console.log(results[i].place_id);
+            promiseList.push(model.findOne({'place_id': results[i].place_id},{}));
+        }
+        Promise.all(promiseList).then(list=>{
+            for(i=0;i<list.length;i++){
+                if(list[i] != null){
+                    results.splice(i,1);
+                    list.splice(i,1);
+                    i--;
+                }
+            }
+            resolve(results);
+        });
+    });
+
 }
 
 
@@ -266,6 +257,7 @@ function firstCall(geocode, radius){
         .then(results=>{
             for(i = 0;i<JSON.parse(results).results.length;i++){
                 overallResults.push(JSON.parse(results).results[i]);
+
             }
             //recursivleyCallNextToken(JSON.parse(results).next_page_token)
             recursivleyCallNextToken(overallResults,JSON.parse(results).next_page_token)
@@ -280,6 +272,7 @@ function firstCall(geocode, radius){
 
 function recursivleyCallNextToken(overallResults,next_token){
     return new Promise(resolve=>{
+
         if(next_token == undefined){
             resolve();
             return;
@@ -289,6 +282,7 @@ function recursivleyCallNextToken(overallResults,next_token){
             request(url).then(results=>{
                 for(i = 0;i<JSON.parse(results).results.length;i++){
                     overallResults.push(JSON.parse(results).results[i]);
+
                 }
                 resolve(recursivleyCallNextToken(JSON.parse(results).next_page_token));
             });
