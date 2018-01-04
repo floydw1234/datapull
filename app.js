@@ -1,3 +1,4 @@
+require('dotenv').config();
 var JSON = require('JSON');
 var express = require('express');
 var path = require('path');
@@ -7,6 +8,7 @@ var mongoose = require('mongoose');
 var yelp = require('yelp-fusion');
 var Promise = require('bluebird');
 var NodeGeocoder = require('node-geocoder');
+
 mongoose.connect('mongodb://localhost:27017/west');
 var db = mongoose.connection;
 db.on('error', console.error.bind(console, 'connection error:'));
@@ -17,10 +19,10 @@ var Schema = mongoose.Schema;
 
 var PythonShell = require('python-shell');
 
-var apikeyGooglePlaces = "AIzaSyBKXwgZdao35HxDge4AEqj1VYR5l2z-dOI";
-var apikeyGoogleGeocoding = "AIzaSyBfS4LBIkk4XtD0_IvR0TRad0AVEfYazdM";
-var apikeyYelp = "_LE2dOfmMJQmui2Ez8gXR4RCRm392itaMOpMBvVHxIwevwts2y7dqkjLN6-fYEc9lqaXNZUAmGtQXXqxlwAakoyv0WsgVxTEJUqG3J36OYQOUlJfVoORL2_mZ0JMWnYx";
-var apikeyEventful = "LXjPQvppHPrvFstn";
+var apikeyGooglePlaces = process.env.apikeyGooglePlaces;
+var apikeyGoogleGeocoding = process.env.apikeyGoogleGeocoding;
+var apikeyYelp = process.env.apikeyYelp;
+var apikeyEventful = process.env.apikeyEventful;
 
 
 var multer = require('multer');

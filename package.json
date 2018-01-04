@@ -9,6 +9,15 @@
   "author": "William Floyd",
   "license": "ISC",
   "dependencies": {
+    "JSON": "^1.0.0",
+    "bluebird": "^3.5.1",
+    "body-parser": "^1.18.2",
+    "dotenv": "^4.0.0",
+    "express": "^4.16.2",
+    "mongoose": "^5.0.0-rc2",
+    "node-geocoder": "^3.21.1",
+    "path": "^0.12.7",
+    "request-promise": "^4.2.2",
     "yelp-fusion": "^2.0.3"
   }
 }
