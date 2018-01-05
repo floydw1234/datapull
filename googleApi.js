@@ -21,58 +21,44 @@ var PythonShell = require('python-shell');
 
 var apikeyGooglePlaces = process.env.apikeyGooglePlaces;
 var apikeyGoogleGeocoding = process.env.apikeyGoogleGeocoding;
-var apikeyYelp = process.env.apikeyYelp;
-var apikeyEventful = process.env.apikeyEventful;
 
 
-var multer = require('multer');
-var upload = multer();
-
-var app = express();
-app.use(bodyParser.urlencoded({ extended: false}));
-app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-var business = new Schema({
-    name: String,
-    latitude: Number,
-    longitude: Number,
-    address: String,
-    type: Object
-});
-
-var googleLazy = new Schema({
+var googleSchema = new Schema({
     business: Object,
     date: Date,
     place_id: String
 });
 
-var model = mongoose.model('business', googleLazy);
-
-
-var searchRadius = 30000; //distance in meters
+var model = mongoose.model('googleBusiness', googleSchema);
 
 
 
-main();
+
+var cities = ["Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
 
 
-function main(){ // This is the highest level function on this js file. gets a list of cities, converts to geocode, then does a for loop, storing business data in the database for each city using "getAndStoreBusinessData"
-    var cities = ["Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
-    var searchRadius = 3000; //distance in meters
-    convertListOfCitiesToGeocodes(cities).then(list=>{
-        console.log(list);
-        for(i=0;i<list.length;i++){
-            getAndStoreBusinessData(list[i],searchRadius).then(()=>{
-                console.log(list.length);
-                console.log("done with: " + cities[i]);
+storeCityData(cities);
+
+// this function below does everything. pretty much my main function of the file.
+function storeCityData(cities){ //Gets a list of cities, converts to geocode, then does a for loop, storing business data in the database for each city using "getAndStoreBusinessData"
+    promiseList = [];
+    var searchRadius = 5000; //radius of search in meters
+    return new Promise(resolve=>{
+        convertListOfCitiesToGeocodes(cities).then(list=>{
+            for(i=0;i<list.length;i++){
+                promiseList.push(getAndStoreBusinessData(list[i],searchRadius));
+            }
+            Promise.all(promiseList).then(()=>{
+                die("all done!")
             });
-        }
+
+        });
     });
 }
 
 
 function getAndStoreBusinessData(geoCode, radius){ // This takes geoCode, radius and stores the detailed business data into the database using the helping functions below.
+    var promiseList = [];
     return new Promise(resolve=>{
         buildGoogleList(geoCode, radius).then(allListings=>{
             console.log("starting to filterDuplicates");
@@ -88,11 +74,12 @@ function getAndStoreBusinessData(geoCode, radius){ // This takes geoCode, radius
                     date: new Date(),
                     place_id: JSON.parse(list[i]).result.place_id
                 });
-                doc.save(function(err) {
-                   if (err) throw err;
-                });
+                promiseList.push(doc.save());
             }
-            resolve();
+            Promise.all(promiseList).then(()=>{
+                resolve();
+            });
+
         });
     });
 }
@@ -193,20 +180,7 @@ function googlePlacesQuery(geocode,radius){ // returns a list of the businesses 
     });
 }
 
-function YelpPlacesQuery(geocode,radius){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
-    return new Promise(function(resolve,reject){
-        const client = yelp.client(apikeyYelp);
-        client.search({
-          latitude: geocode.split(",")[0],
-          longitude: geocode.split(",")[1],
-          raduis: radius
-        }).then(response => {
-          resolve(response.jsonBody.businesses);
-        }).catch(e => {
-          reject(e);
-        });
-    });
-}
+
 
 function testEventfulCall(){ //To be implemented
     request("http://api.eventful.com/rest/events/search?...&where=32.746682,-117.162741&within=25")
@@ -277,23 +251,15 @@ function parseList(results){ // helper function for JSON.parsing the data in a l
     });
 }
 
-
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
-
-
-// error handler
-app.get("/", function(req,res){
-	res.sendfile('public/index.html');
-});
+var die = function(quitMsg)
+{
+    console.error(quitMsg)
+    process.exit(1);
+}
 
 
 
-module.exports = app;
-app.listen(3000, function () {
-  console.log('your app listening on port 3000!');
-});
+
 
 
 /*
