@@ -34,7 +34,7 @@ var model = mongoose.model('yelpBusinesses', yelpSchema);
 var geoCode = "33.729228, -117.543850";
 var cities = ["Temecula, Ca","Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
 
-main(cities);
+//main(cities);
 
 function main(cities){
     var promiseList = [];
@@ -100,7 +100,12 @@ function filterDuplicates(results){ // This function makes sure that we are not 
 
 }
 
-
+request("https://api.yelp.com/v3/businesses/search?location=Irvine",
+    {'auth': {
+    'bearer': apikeyYelp
+}}).then(resp=>{
+    console.log(resp);
+});
 
 function YelpPlacesQuery(geocode){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
     return new Promise(function(resolve,reject){
@@ -155,3 +160,8 @@ var die = function(quitMsg)
     console.error(quitMsg)
     process.exit(1);
 }
+
+
+/*
+
+*/
