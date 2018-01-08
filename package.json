@@ -13,6 +13,7 @@
     "bluebird": "^3.5.1",
     "body-parser": "^1.18.2",
     "dotenv": "^4.0.0",
+    "eventful-node": "^1.1.1",
     "express": "^4.16.2",
     "mongoose": "^5.0.0-rc2",
     "node-geocoder": "^3.21.1",
