@@ -17,7 +17,6 @@ events = api.call('/events/search', q='music', l='San Francisco')
 for event in events['events']['event']:
     print "%s" % (event['city_name'])
     collection.insert_one({"event": event,"date": datetime.datetime.now(),"title": event['title']})
-
     counter += 1
     print counter
     print"---------------------------------------------\n"
