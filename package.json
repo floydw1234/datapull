@@ -18,6 +18,7 @@
     "mongoose": "^5.0.0-rc2",
     "node-geocoder": "^3.21.1",
     "path": "^0.12.7",
+    "q": "^1.5.1",
     "request-promise": "^4.2.2",
     "yelp-fusion": "^2.0.3"
   }

@@ -34,7 +34,7 @@ var model = mongoose.model('googleBusiness', googleSchema);
 
 
 
-var cities = ["Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
+var cities = ["Irvine, Ca" ]//,"San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
 
 
 storeCityData(cities);
@@ -42,7 +42,7 @@ storeCityData(cities);
 // this function below does everything. pretty much my main function of the file.
 function storeCityData(cities){ //Gets a list of cities, converts to geocode, then does a for loop, storing business data in the database for each city using "getAndStoreBusinessData"
     promiseList = [];
-    var searchRadius = 5000; //radius of search in meters
+    var searchRadius = 500000; //radius of search in meters
     return new Promise(resolve=>{
         convertListOfCitiesToGeocodes(cities).then(list=>{
             for(i=0;i<list.length;i++){
@@ -67,6 +67,7 @@ function getAndStoreBusinessData(geoCode, radius){ // This takes geoCode, radius
             console.log("starting to Get more data");
             return getMoreData(list);
         }).then(list => {
+            console.log(list[1])
             console.log("starting saving");
             for(i=0;i<list.length;i++){
                 var doc = new model({
@@ -257,12 +258,60 @@ var die = function(quitMsg)
     process.exit(1);
 }
 
-
-
-
-
-
 /*
+
+
+
+-------original schema for yelp with comments-----------------------
+
+var dataFormatGoogle = new Schema({
+    orgName: String, // true
+    address: String, //true
+    phone: String, // true phone
+    email: String, //false
+    website: String, //true website
+    tagLine: String, // false
+    logo: String, //flase
+    photo: String, //true
+    mainCategory: String, // see below
+    subCategories: String, // combine this with above category because Google doesnt give a distincion, only "types" key
+    top5Services: String,// not provided by yelp
+    description: String,// not provided by yelp
+    optionalInfo: String,// not provided by yelp
+    location1Name: //this will be same as orgName -- redundant
+    location1Address: String,// easy for google
+    location1City: String,// easy for google
+    location1State: String,// easy for google
+    location1Zip: Number,// easy for google
+    location1Phone: String,// easy for google
+    location1Email: // not available through api
+    areasServed: // not available through api
+    daysOp: //  This should be included in the information below- or this could be extracted from the info below(but that is redundant)
+    hoursOp: Object, // this should be formatted the way google or yelp does it in a json object with the hours for each day
+    ratings: Number, //Easy
+    busType: // not available through api
+});
+
+-----------proposed schema based on comments(at least everything that is available from scraping)---------------------
+
+var dataFormatGoogle = new Schema({
+    orgName: String, // true
+    address: String, //true
+    phone: String, // true phone
+    website: String, //true website
+    photo: String, //true
+    mainCategory: String, // see below
+    subCategories: String, // combine this with above category because Google doesnt give a distincion, only "types" key
+    location1Address: String,// easy for google
+    location1City: String,// easy for google
+    location1State: String,// easy for google
+    location1Zip: Number,// easy for google
+    location1Phone: String,// easy for google
+    hoursOp: Object, // this should be formatted the way google or yelp does it in a json object with the hours for each day
+    ratings: Number, //Easy
+});
+*/
+
 
 ----------------Below here lies the gode graveyard. Functions/snippets here were just useless enough to not be needed, but took enough time to make me think that
 they might be worth something in the future. Most of these half work so use with extreme caution or probably not at all-------------------------------------------
@@ -392,6 +441,10 @@ function mainOld(){
 
     });
 }
+
+
+
+
 
 
 */
