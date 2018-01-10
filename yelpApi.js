@@ -34,28 +34,46 @@ var yelpSchema = new Schema({
 var model = mongoose.model('yelpBusinesses', yelpSchema);
 
 var geoCode = "33.729228, -117.543850";
-var cities = ["Half Moon Bay","Dallas, TX"];//, "San Francisco, Ca","Green Bay, WI"];//, CA","Atlanta, GA"];
-//var cities = ["Irvine, Ca"];
+var cities = ["Half Moon Bay", "Manhattan, NY","Green Bay, WI","Atlanta, GA", "Hoboken, NJ"];//, "Manhattan, NY"];
+//var cities = ["Hoboken, NJ"]; 
 main(cities);
-/*
-var url = "https://api.yelp.com/v3/businesses/fob-poke-bar-seattle-2";
-request(url,
-    {'auth': {
-    'bearer': apikeyYelp
-}}).then(resp=>{
-    console.log(resp);
-});
-*/
+
+
 function main(cities){
+    return new Promise(resolve=>{
+        buildTotalList(cities).then(totalList=>{
+            return uniq_fast(totalList);
+        }).then(unique_list=>{
+            return storeDocs(unique_list);
+        }).then(()=>{
+            die("all done");
+        }).catch(error=>{
+            console.log(error);
+        });
+
+    });
+}
+
+function buildTotalList(cities){
     var promiseList = [];
     return new Promise(resolve=>{
         convertListOfCitiesToGeocodes(cities).then(geoCodes=>{
+            return addSurroundingGeoCodes(geoCodes);
+        }).then(geoCodes=>{
+            console.log(geoCodes);
             for(i=0;i<geoCodes.length;i++){
                 promiseList.push(getAndStoreBusinessData(geoCodes[i]));
             }
-            Promise.all(promiseList).then(()=>{
-                die("all done");
-            })
+            Promise.all(promiseList).then(listings=>{
+                var totalList = [];
+                if(listings.length != 0) totalList = listings[0];
+                for(i=1;i<listings.length;i++){
+                    totalList.concat(listings[i]);
+
+                }
+                resolve(totalList);
+                //die("all done");
+            });
         });
     });
 }
@@ -64,9 +82,12 @@ function getMoreData(list){
     var promiseList = [];
     return new Promise(resolve=>{
         for(i=0;i<list.length -1;i++){
-            console.log(list[i].id);
+
             var url = "https://api.yelp.com/v3/businesses/" + list[i].id;
-            if(url.indexOf("é") == -1){
+            var regexp = /^[a-zA-Z0-9-_]+$/;
+            if (list[i].id.search(regexp) == -1)
+                { console.log(list[i].id); }
+            else{
                 promiseList.push(request(url,
                     {
                         'auth': {
@@ -74,17 +95,7 @@ function getMoreData(list){
                             }
                     }
                     ));
-            }else{
-                console.log("momentum");
             }
-            /*
-            request(url,
-                {'auth': {
-                'bearer': apikeyYelp
-            }}).catch(error=>{
-                console.log(error);
-            });
-            */
         }
 
         Promise.all(promiseList).then(newList =>{
@@ -101,27 +112,35 @@ function getAndStoreBusinessData(geoCode){
         YelpPlacesQuery(geoCode).then(list=>{
             return filterDuplicates(list);
         }).then(list=>{
-
             return getMoreData(list);
         }).then(list=>{
-            console.log(list);
-            //console.log(list);
-            for(i=0;i<list.length;i++){
-
-                var doc = new model({
-                    business: list[i],
-                    date: new Date(),
-                    place_id: list[i].id
-                });
-                promiseList.push(doc.save());
-            }
-            Promise.all(promiseList).then(()=>{
-                resolve();
-            });
+            resolve(list);
         });
     });
 }
 
+
+function storeDocs(list){
+    var promiseList = [];
+    return new Promise(resolve=>{
+        for(i=0;i<list.length;i++){
+            var doc = new model({
+                business: list[i],
+                date: new Date(),
+                place_id: list[i].id
+            });
+            promiseList.push(doc.save());
+        }
+        Promise.all(promiseList).then(()=>{
+            resolve();
+        });
+    });
+}
+
+
+/*
+
+*/
 
 
 
@@ -130,8 +149,6 @@ function filterDuplicates(results){ // This function makes sure that we are not 
     var promiseList = [];
     return new Promise(resolve=>{
         for(i=0;i<results.length;i++){
-            //console.log(i);
-            //console.log(results[i].place_id);
             promiseList.push(model.findOne({'place_id': results[i].id},{}));
         }
         Promise.all(promiseList).then(list=>{
@@ -147,6 +164,24 @@ function filterDuplicates(results){ // This function makes sure that we are not 
     });
 
 }
+
+function uniq_fast(a) {
+    return new Promise(resolve=>{
+        var seen = {};
+        var out = [];
+        var len = a.length;
+        var j = 0;
+        for(var i = 0; i < len; i++) {
+             var item = a[i];
+             if(seen[item] !== 1) {
+                   seen[item] = 1;
+                   out[j++] = item;
+             }
+        }
+        resolve(out);
+    });
+}
+
 
 
 /*
@@ -241,3 +276,14 @@ var die = function(quitMsg)
     console.error(quitMsg)
     process.exit(1);
 }
+
+
+/*
+var url = "https://api.yelp.com/v3/businesses/fob-poke-bar-seattle-2";
+request(url,
+    {'auth': {
+    'bearer': apikeyYelp
+}}).then(resp=>{
+    console.log(resp);
+});
+*/
