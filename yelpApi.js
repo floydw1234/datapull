@@ -8,6 +8,8 @@ var mongoose = require('mongoose');
 var yelp = require('yelp-fusion');
 var Promise = require('bluebird');
 var NodeGeocoder = require('node-geocoder');
+var q = require('q');
+var async = require('async');
 
 mongoose.connect('mongodb://localhost:27017/west');
 var db = mongoose.connection;
@@ -32,8 +34,8 @@ var yelpSchema = new Schema({
 var model = mongoose.model('yelpBusinesses', yelpSchema);
 
 var geoCode = "33.729228, -117.543850";
-var cities = ["hoboken, NJ"]//"Temecula, Ca","Irvine, Ca", "San Francisco, Ca","Green Bay, WI", "Manhattan, NY", "Dallas, TX","San Jose", "Mountain View","Half Moon Bay, CA","Atlanta, GA"];
-
+var cities = ["Half Moon Bay","Dallas, TX"];//, "San Francisco, Ca","Green Bay, WI"];//, CA","Atlanta, GA"];
+//var cities = ["Irvine, Ca"];
 main(cities);
 /*
 var url = "https://api.yelp.com/v3/businesses/fob-poke-bar-seattle-2";
@@ -52,7 +54,7 @@ function main(cities){
                 promiseList.push(getAndStoreBusinessData(geoCodes[i]));
             }
             Promise.all(promiseList).then(()=>{
-                //die("all done");
+                die("all done");
             })
         });
     });
@@ -62,32 +64,33 @@ function getMoreData(list){
     var promiseList = [];
     return new Promise(resolve=>{
         for(i=0;i<list.length -1;i++){
+            console.log(list[i].id);
             var url = "https://api.yelp.com/v3/businesses/" + list[i].id;
-            console.log(url);
-
-            promiseList.push(request(url,
-                {'auth': {
-                'bearer': apikeyYelp
-            }}));
+            if(url.indexOf("é") == -1){
+                promiseList.push(request(url,
+                    {
+                        'auth': {
+                            'bearer': apikeyYelp
+                            }
+                    }
+                    ));
+            }else{
+                console.log("momentum");
+            }
             /*
             request(url,
                 {'auth': {
                 'bearer': apikeyYelp
-            }}).then(resp=>{
-                console.log(resp);
-            }).catch(err=>{
-                Continue;
-            });
-*/
-
-        }
-        Promise.all(promiseList).then(error =>{
-            if(error){
+            }}).catch(error=>{
                 console.log(error);
-            }
-            console.log(newList[4]);
+            });
+            */
+        }
+
+        Promise.all(promiseList).then(newList =>{
             resolve(newList);
         });
+
     });
 }
 
@@ -96,11 +99,12 @@ function getAndStoreBusinessData(geoCode){
     var promiseList = [];
     return new Promise(resolve=>{
         YelpPlacesQuery(geoCode).then(list=>{
-            console.log(list[1]);
             return filterDuplicates(list);
-        //}).then(list=>{
-        //    return getMoreData(list);
         }).then(list=>{
+
+            return getMoreData(list);
+        }).then(list=>{
+            console.log(list);
             //console.log(list);
             for(i=0;i<list.length;i++){
 
@@ -109,7 +113,7 @@ function getAndStoreBusinessData(geoCode){
                     date: new Date(),
                     place_id: list[i].id
                 });
-                //promiseList.push(doc.save());
+                promiseList.push(doc.save());
             }
             Promise.all(promiseList).then(()=>{
                 resolve();
@@ -195,6 +199,29 @@ function convertAddress(address){ //This takes an address/searchTerm and returns
 		});
 }
 
+function addSurroundingGeoCodes(list){
+    return new Promise(resolve=>{
+        var count = list.length;
+        var lat;
+        var lng;
+        var searchRadius = 0.03;
+        for(i=0;i<count;i++){
+            lat = parseFloat(list[i].split(",")[0]);
+            lng = parseFloat(list[i].split(",")[1]);
+            lat += searchRadius;
+            list.push(lat + "," + lng);
+            lat -= searchRadius*2;
+            list.push(lat + "," + lng);
+            lat += searchRadius;
+            lng += searchRadius;
+            list.push(lat + "," + lng);
+            lng -= searchRadius*2;
+            list.push(lat + "," + lng);
+        }
+        resolve(list);
+    });
+}
+
 
 
 function convertListOfCitiesToGeocodes(cities){ // takes a list of cities, puts them through a google geocode api to return a list of geocodes
@@ -214,57 +241,3 @@ var die = function(quitMsg)
     console.error(quitMsg)
     process.exit(1);
 }
-/*
--------original schema for yelp with comments-----------------------
-var dataFormatYelp = new Schema({
-    orgName: String, // easy
-    address: String, //easy
-    phone: String, // easy
-    email: String, //not available from yelp reqeusts for scraping
-    website: String, //easy
-    tagLine: String, // This is not availabel from scraping
-    logo: String, //not available
-    photo: String, //Most have a couple of links to images so we can make this a json object with string just like how google does it
-    mainCategory: String, // this is easy for yelp
-    subCategories: String, // this is kindof givenn
-    top5Services: String,// not provided by yelp
-    description: String,// not provided by yelp
-    optionalInfo: String,// not provided by yelp
-    location1Name: ????
-    location1Address: String, //Same as above
-    location1City: String,//easy for yelp
-    location1State: String,//easy for yelp
-    location1Zip: Number,//easy for yelp
-    location1Phone:// redundant
-    location1Email:// not provided by yelp
-    areasServed: // not provided by yelp
-    daysOp: //  This should be included in the information below- or this could be extracted from the info below(but that is redundant)
-    hoursOp: Object, // this should be formatted the way google or yelp does it in a json object with the hours for each day
-    ratings: Number, //Easy
-    busType: String // not provided by yelp
-});
-
------------proposed schema based on comments(at least everything that is available from scraping)---------------------
-
-var dataFormatYelp = new Schema({
-    orgName: String, // easy
-    address: String, //easy
-    phone: String, // easy
-    website: String, //easy
-    photo: String, //Most have a couple of links to images so we can make this a json object with string just like how google does it
-    mainCategory: String, // this is easy for yelp
-    subCategories: String, // this is kindof givenn
-    location1Address: String, //easy for yelp
-    location1City: String,//easy for yelp
-    location1State: String,//easy for yelp
-    location1Zip: Number,//easy for yelp
-    daysOp: //  This should be included in the information below- or this could be extracted from the info below(but that is reduntant)
-    hoursOp: Object, // this should be formatted the way google or yelp does it in a json object with the hours for each day
-    ratings: Number, //Easy
-});
-
-
-/*
-
-
-*/

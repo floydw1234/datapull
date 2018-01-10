@@ -1,0 +1,48 @@
+
+-------original schema for yelp with comments-----------------------
+var dataFormatYelp = new Schema({
+    orgName: String, // easy
+    address: String, //easy
+    phone: String, // easy
+    email: String, //not available from yelp reqeusts for scraping
+    website: String, //easy
+    tagLine: String, // This is not availabel from scraping
+    logo: String, //not available
+    photo: String, //Most have a couple of links to images so we can make this a json object with string just like how google does it
+    mainCategory: String, // this is easy for yelp
+    subCategories: String, // this is kindof givenn
+    top5Services: String,// not provided by yelp
+    description: String,// not provided by yelp
+    optionalInfo: String,// not provided by yelp
+    location1Name: ????
+    location1Address: String, //Same as above
+    location1City: String,//easy for yelp
+    location1State: String,//easy for yelp
+    location1Zip: Number,//easy for yelp
+    location1Phone:// redundant
+    location1Email:// not provided by yelp
+    areasServed: // not provided by yelp
+    daysOp: //  This should be included in the information below- or this could be extracted from the info below(but that is redundant)
+    hoursOp: Object, // this should be formatted the way google or yelp does it in a json object with the hours for each day
+    ratings: Number, //Easy
+    busType: String // not provided by yelp
+});
+
+-----------proposed schema based on comments(at least everything that is available from scraping)---------------------
+
+var dataFormatYelp = new Schema({
+    orgName: String, // easy
+    address: String, //easy
+    phone: String, // easy
+    website: String, //easy
+    photo: String, //Most have a couple of links to images so we can make this a json object with string just like how google does it
+    mainCategory: String, // this is easy for yelp
+    subCategories: String, // this is kindof givenn
+    location1Address: String, //easy for yelp
+    location1City: String,//easy for yelp
+    location1State: String,//easy for yelp
+    location1Zip: Number,//easy for yelp
+    daysOp: //  This should be included in the information below- or this could be extracted from the info below(but that is reduntant)
+    hoursOp: Object, // this should be formatted the way google or yelp does it in a json object with the hours for each day
+    ratings: Number, //Easy
+});
