@@ -34,14 +34,14 @@ var yelpSchema = new Schema({
 var model = mongoose.model('yelpBusinesses', yelpSchema);
 
 var geoCode = "33.729228, -117.543850";
-var cities = ["Half Moon Bay", "Manhattan, NY","Green Bay, WI","Atlanta, GA", "Hoboken, NJ"];//, "Manhattan, NY"];
-//var cities = ["Hoboken, NJ"]; 
-main(cities);
+var cities = ["Manhattan, NY"];//,"Green Bay, WI","Atlanta, GA", "Hoboken, NJ"];// can only have 5 cities right now
+//var cities = ["Hoboken, NJ"];
+//main(cities,500);
 
 
-function main(cities){
+function main(cities,radius){
     return new Promise(resolve=>{
-        buildTotalList(cities).then(totalList=>{
+        buildTotalList(cities,radius).then(totalList=>{
             return uniq_fast(totalList);
         }).then(unique_list=>{
             return storeDocs(unique_list);
@@ -50,29 +50,26 @@ function main(cities){
         }).catch(error=>{
             console.log(error);
         });
-
     });
 }
 
-function buildTotalList(cities){
+function buildTotalList(cities,radius){
     var promiseList = [];
     return new Promise(resolve=>{
         convertListOfCitiesToGeocodes(cities).then(geoCodes=>{
-            return addSurroundingGeoCodes(geoCodes);
-        }).then(geoCodes=>{
+    //        return addSurroundingGeoCodes(geoCodes);
+    //    }).then(geoCodes=>{
             console.log(geoCodes);
             for(i=0;i<geoCodes.length;i++){
-                promiseList.push(getAndStoreBusinessData(geoCodes[i]));
+                promiseList.push(getAndStoreBusinessData(geoCodes[i],radius));
             }
             Promise.all(promiseList).then(listings=>{
                 var totalList = [];
                 if(listings.length != 0) totalList = listings[0];
                 for(i=1;i<listings.length;i++){
                     totalList.concat(listings[i]);
-
                 }
                 resolve(totalList);
-                //die("all done");
             });
         });
     });
@@ -86,7 +83,7 @@ function getMoreData(list){
             var url = "https://api.yelp.com/v3/businesses/" + list[i].id;
             var regexp = /^[a-zA-Z0-9-_]+$/;
             if (list[i].id.search(regexp) == -1)
-                { console.log(list[i].id); }
+                { console.log("business with id: \"" + list[i].id + "\" could not be queried(yelp can't handle accents)"); }
             else{
                 promiseList.push(request(url,
                     {
@@ -106,10 +103,10 @@ function getMoreData(list){
 }
 
 
-function getAndStoreBusinessData(geoCode){
+function getAndStoreBusinessData(geoCode,radius){
     var promiseList = [];
     return new Promise(resolve=>{
-        YelpPlacesQuery(geoCode).then(list=>{
+        YelpPlacesQuery(geoCode,radius).then(list=>{
             return filterDuplicates(list);
         }).then(list=>{
             return getMoreData(list);
@@ -181,24 +178,63 @@ function uniq_fast(a) {
         resolve(out);
     });
 }
+/*
+YelpPlacesQuery("40.7830603,-73.9712488",5000).then(result=>{
+    console.log(result);
+    die("all done");
+});
+*/
+
+main(cities,500);
+
+function YelpPlacesQuery(geocode, radius){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
+    var overallResults = [];
+    return new Promise(function(resolve,reject){
+        var latitude = geocode.split(",")[0];
+        var longitude = geocode.split(",")[1];
+        var url = "https://api.yelp.com/v3/businesses/search?latitude=" + latitude +"&longitude=" + longitude + "&radius=" + radius + "&limit=50&offset=0";
+        console.log(url);
+        request(url,
+            {'auth': {
+            'bearer': apikeyYelp
+        }}).then(resp=>{
+            //console.log(JSON.parse(resp).businesses.length);
+            for(var i = 0; i < JSON.parse(resp).businesses.length; i++){
+                overallResults.push(JSON.parse(resp).businesses[i]);
+            }
+            recursivleyGetNextPage(overallResults,JSON.parse(resp),50,latitude,longitude,radius).then(()=>{
+                resolve(overallResults);
+            });
+
+        });
+    });
+}
+
+function recursivleyGetNextPage(overallResults,result,offset,latitude,longitude,radius){
+    return new Promise(resolve=>{
+        if(result.businesses.length == 0 || offset > 950){
+            resolve();
+            return;
+        }
+        var url = "https://api.yelp.com/v3/businesses/search?latitude=" + latitude +"&longitude=" + longitude + "&radius=" + radius + "&limit=50&offset=" + offset;
+        console.log(url);
+        request(url,
+            {'auth': {
+            'bearer': apikeyYelp
+        }}).then(resp=>{
+            console.log(JSON.parse(resp).businesses.length);
+            for(var i = 0; i < JSON.parse(resp).businesses.length; i++){
+                overallResults.push(JSON.parse(resp).businesses[i]);
+            }
+            resolve(recursivleyGetNextPage(overallResults,JSON.parse(resp),offset + 50,latitude,longitude,radius));
+        });
+
+    });
+}
 
 
 
 /*
-function YelpPlacesQuery(geocode){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
-    return new Promise(function(resolve,reject){
-        var latitude = geocode.split(",")[0];
-        var longitude = geocode.split(",")[1];
-        request("https://api.yelp.com/v3/businesses/search?location=Irvine",
-            {'auth': {
-            'bearer': apikeyYelp
-        }}).then(resp=>{
-            resolve(resp);
-        });
-    });
-}
-*/
-
 function YelpPlacesQuery(geocode){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
     return new Promise(function(resolve,reject){
         const client = yelp.client(apikeyYelp);
@@ -212,7 +248,7 @@ function YelpPlacesQuery(geocode){ // returns a list of the businesses from Yelp
         });
     });
 }
-
+*/
 
 function convertAddress(address){ //This takes an address/searchTerm and returns a promise with the geoCode '33.6845673,-117.8265049' as a resolve
 		return new Promise(function(resolve){
