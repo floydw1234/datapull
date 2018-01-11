@@ -34,7 +34,7 @@ var yelpSchema = new Schema({
 var model = mongoose.model('yelpBusinesses', yelpSchema);
 
 var geoCode = "33.729228, -117.543850";
-var cities = ["Manhattan, NY"];//,"Green Bay, WI","Atlanta, GA", "Hoboken, NJ"];// can only have 5 cities right now
+var cities = ["Manhattan, NY","Green Bay, WI","Atlanta, GA", "Hoboken, NJ"];// can only have 5 cities right now
 //var cities = ["Hoboken, NJ"];
 //main(cities,500);
 
@@ -42,8 +42,10 @@ var cities = ["Manhattan, NY"];//,"Green Bay, WI","Atlanta, GA", "Hoboken, NJ"];
 function main(cities,radius){
     return new Promise(resolve=>{
         buildTotalList(cities,radius).then(totalList=>{
+            console.log("removing list duplicates");
             return uniq_fast(totalList);
         }).then(unique_list=>{
+            console.log("storing docs");
             return storeDocs(unique_list);
         }).then(()=>{
             die("all done");
@@ -57,29 +59,40 @@ function buildTotalList(cities,radius){
     var promiseList = [];
     return new Promise(resolve=>{
         convertListOfCitiesToGeocodes(cities).then(geoCodes=>{
-    //        return addSurroundingGeoCodes(geoCodes);
-    //    }).then(geoCodes=>{
-            console.log(geoCodes);
-            for(i=0;i<geoCodes.length;i++){
-                promiseList.push(getAndStoreBusinessData(geoCodes[i],radius));
-            }
-            Promise.all(promiseList).then(listings=>{
-                var totalList = [];
-                if(listings.length != 0) totalList = listings[0];
-                for(i=1;i<listings.length;i++){
-                    totalList.concat(listings[i]);
-                }
-                resolve(totalList);
+        //    return addSurroundingGeoCodes(geoCodes);
+        //}).then(geoCodes=>{
+            var overallResults =[];
+                getBusinessData(geoCodes[0],radius).then(list=>{
+                    overallResults = list;
+                    sequentiallyGetBusinessData(overallResults,geoCodes,radius,1).then(()=>{
+                        resolve(overallResults);
+                    });
+                });
             });
         });
+}
+
+function sequentiallyGetBusinessData(overallResults, geoCodes, radius,i){
+    return new Promise(resolve=>{
+        if(!(i<geoCodes.length)){
+            resolve();
+            return;
+        }else{
+            getBusinessData(geoCodes[i],radius).then(result=>{
+                overallResults.concat(result);
+                resolve(sequentiallyGetBusinessData(overallResults,geoCodes,radius,i+1));
+            });
+        }
     });
+
+
 }
 
 function getMoreData(list){
     var promiseList = [];
     return new Promise(resolve=>{
-        for(i=0;i<list.length -1;i++){
-
+        console.log(list.length);
+        for(i=0;i<500 && i < list.length;i++){
             var url = "https://api.yelp.com/v3/businesses/" + list[i].id;
             var regexp = /^[a-zA-Z0-9-_]+$/;
             if (list[i].id.search(regexp) == -1)
@@ -95,22 +108,44 @@ function getMoreData(list){
             }
         }
 
-        Promise.all(promiseList).then(newList =>{
-            resolve(newList);
+        Promise.all(promiseList).then(newList1 =>{
+            var promiseList2 = [];
+            for(i=500;i<list.length;i++){
+                var url = "https://api.yelp.com/v3/businesses/" + list[i].id;
+                var regexp = /^[a-zA-Z0-9-_]+$/;
+                if (list[i].id.search(regexp) == -1)
+                    { console.log("business with id: \"" + list[i].id + "\" could not be queried(yelp can't handle accents)"); }
+                else{
+                    promiseList2.push(request(url,
+                        {
+                            'auth': {
+                                'bearer': apikeyYelp
+                                }
+                        }
+                        ));
+                }
+            }
+            Promise.all(promiseList2).then(newList2 =>{
+                resolve(newList1.concat(newList2));
+            });
         });
 
     });
 }
 
 
-function getAndStoreBusinessData(geoCode,radius){
+function getBusinessData(geoCode,radius){
     var promiseList = [];
     return new Promise(resolve=>{
+        console.log("Querying Yelp for businesses...");
         YelpPlacesQuery(geoCode,radius).then(list=>{
+            console.log("filtering out businesses that are already in the database...");
             return filterDuplicates(list);
         }).then(list=>{
+            console.log("getting more data from the businesses...");
             return getMoreData(list);
         }).then(list=>{
+            console.log(list.length);
             resolve(list);
         });
     });
@@ -188,12 +223,13 @@ YelpPlacesQuery("40.7830603,-73.9712488",5000).then(result=>{
 main(cities,500);
 
 function YelpPlacesQuery(geocode, radius){ // returns a list of the businesses from Yelp with some data about them in the JSON format.
+
     var overallResults = [];
     return new Promise(function(resolve,reject){
         var latitude = geocode.split(",")[0];
         var longitude = geocode.split(",")[1];
         var url = "https://api.yelp.com/v3/businesses/search?latitude=" + latitude +"&longitude=" + longitude + "&radius=" + radius + "&limit=50&offset=0";
-        console.log(url);
+        //console.log(url);
         request(url,
             {'auth': {
             'bearer': apikeyYelp
@@ -217,12 +253,12 @@ function recursivleyGetNextPage(overallResults,result,offset,latitude,longitude,
             return;
         }
         var url = "https://api.yelp.com/v3/businesses/search?latitude=" + latitude +"&longitude=" + longitude + "&radius=" + radius + "&limit=50&offset=" + offset;
-        console.log(url);
+        //console.log(url);
         request(url,
             {'auth': {
             'bearer': apikeyYelp
         }}).then(resp=>{
-            console.log(JSON.parse(resp).businesses.length);
+            //console.log(JSON.parse(resp).businesses.length);
             for(var i = 0; i < JSON.parse(resp).businesses.length; i++){
                 overallResults.push(JSON.parse(resp).businesses[i]);
             }
